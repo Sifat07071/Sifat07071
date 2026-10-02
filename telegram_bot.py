@@ -1,23 +1,50 @@
 import requests
 import time
 from threading import Thread
-from binance_feed import get_binance_candles
+import yfinance as yf
 
 TELEGRAM_BOT_TOKEN = "8953696893:AAGW7gCQ305bxhGuWuriIOQvezpTHriOzjA"
 TELEGRAM_CHAT_ID = "6885238220"
+
+# Yahoo Finance compatible Pairs mapping
+YAHOO_PAIRS_MAP = {
+    "EURUSDT": "EURUSD=X",
+    "GBPUSDT": "GBPUSD=X",
+    "AUDUSDT": "AUDUSD=X",
+    "USDCAD": "USDCAD=X",
+    "USDJPY": "USDJPY=X",
+    "EURJPY": "EURJPY=X",
+    "GBPJPY": "GBPJPY=X",
+    "NZDUSDT": "NZDUSD=X",
+    "BTCUSDT": "BTC-USD",
+    "ETHUSDT": "ETH-USD",
+    "SOLUSDT": "SOL-USD",
+    "XRPUSDT": "XRP-USD"
+}
+
+def get_yahoo_candles_for_result(symbol):
+    try:
+        yahoo_symbol = YAHOO_PAIRS_MAP.get(symbol, symbol)
+        ticker = yf.Ticker(yahoo_symbol)
+        df = ticker.history(period="1d", interval="1m")
+        if df is not None and not df.empty:
+            return df
+    except Exception as e:
+        pass
+    return None
 
 def track_signal_result(symbol, signal_type, sent_time_str):
     # Quotex 1-Minute expiry এর জন্য ক্যান্ডেল ক্লোজ হওয়ার পর্যন্ত (৬০ সেকেন্ড) অপেক্ষা করা
     time.sleep(60)
     
     try:
-        # লেটেস্ট ক্যান্ডেল ডাটা ফেচ করা রেজাল্ট চেক করার জন্য
-        df = get_binance_candles(symbol=symbol)
+        # লেটেস্ট ক্যান্ডেল ডাটা ফেচ করা রেজাল্ট চেক করার জন্য (Yahoo Finance থেকে)
+        df = get_yahoo_candles_for_result(symbol=symbol)
         if df is not None and len(df) >= 2:
             # বিগত ক্যান্ডেলটির ওপেন এবং ক্লোজ প্রাইস তুলনা করা
             last_candle = df.iloc[-1]
-            open_price = last_candle['open']
-            close_price = last_candle['close']
+            open_price = last_candle['Open']
+            close_price = last_candle['Close']
             
             # উইন নাকি লস নির্ধারণ লজিক
             if close_price > open_price:
@@ -75,4 +102,4 @@ def send_telegram_signal(symbol, setup_name, signal_type):
             
     except Exception as e:
         print(f"Telegram Alert Error: {e}")
-        
+                         
