@@ -3,7 +3,7 @@ import time
 from threading import Thread
 import yfinance as yf
 
-TELEGRAM_BOT_TOKEN = "8953696893:AAGW7gCQ305bxhGuWuriIOQvezpTHriOzjA"
+TELEGRAM_BOT_TOKEN = "8828383409:AAGzaDGCz4lQnCEIAUhImFyCnMIVj-0ZNso"
 TELEGRAM_CHAT_ID = "6885238220"
 
 # Yahoo Finance compatible Pairs mapping
