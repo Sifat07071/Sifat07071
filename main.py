@@ -85,7 +85,7 @@ BINANCE_FUTURES_PAIRS = [
 
 
 def initialize_market_leverage():
-  print("⚙️ Setting 10x Leverage for all target pairs...")
+  print("⚙️️ Setting 10x Leverage for all target pairs...")
   for symbol in BINANCE_FUTURES_PAIRS:
     set_leverage(symbol, leverage=10)
 
@@ -129,8 +129,8 @@ def start_bot():
 
         for symbol in BINANCE_FUTURES_PAIRS:
           try:
-            # binance_api.py থেকে ক্যান্ডেল ডেটা ফেচ করা
-            df = get_binance_futures_candles(symbol, timeframe="10m", limit=100)
+            # binance_api.py থেকে ১ মিনিটের ক্যান্ডেল ডেটা ফেচ করা
+            df = get_binance_futures_candles(symbol, timeframe="1m", limit=100)
 
             if df is not None and not df.empty:
               setup_name, signal = scan_all_strategies(df)
@@ -161,4 +161,3 @@ def start_bot():
 
 if __name__ == "__main__":
   start_bot()
-      
