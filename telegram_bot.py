@@ -1,102 +1,71 @@
-from datetime import datetime
-import random
-import requests
+import threading
 import time
-import yfinance as yf
+import ccxt
+import requests
 
+# আপনার টেলিগ্রাম বট টোকেন এবং চ্যাট আইডি এখানে বসাবেন
 TELEGRAM_BOT_TOKEN = "8828383409:AAGzaDGCz4lQnCEIAUhImFyCnMIVj-0ZNso"
 TELEGRAM_CHAT_ID = "6885238220"
 
-# Yahoo Finance compatible Pairs mapping
-YAHOO_PAIRS_MAP = {
-    "EURUSDT": "EURUSD=X",
-    "GBPUSDT": "GBPUSD=X",
-    "AUDUSDT": "AUDUSD=X",
-    "USDCAD": "USDCAD=X",
-    "USDJPY": "USDJPY=X",
-    "EURJPY": "EURJPY=X",
-    "GBPJPY": "GBPJPY=X",
-    "NZDUSDT": "NZDUSD=X",
-    "BTCUSDT": "BTC-USD",
-    "ETHUSDT": "ETH-USD",
-    "SOLUSDT": "SOL-USD",
-    "XRPUSDT": "XRP-USD",
-}
-
-# আইপি ব্লক এড়ানোর জন্য র্যান্ডম ইউজার-এজেন্ট
-USER_AGENTS = [
-    (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,"
-        " like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    ),
-    (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101"
-        " Firefox/121.0"
-    ),
-]
+# বাইন্যান্স ফিউচার্স এক্সচেঞ্জ কানেকশন (ডেটা চেক করার জন্য)
+exchange = ccxt.binance({
+    'options': {'defaultType': 'future'},
+    'enableRateLimit': True,
+})
 
 
-def get_yahoo_candles_for_result(symbol):
+def get_binance_candles_for_result(symbol):
+  """বাইন্যান্স ফিউচার্স থেকে সিগন্যালের রেজাল্ট চেক করার জন্য ক্যান্ডেল ডেটা আনা"""
   try:
-    yahoo_symbol = YAHOO_PAIRS_MAP.get(symbol, symbol)
-
-    # আইপি ব্লক বাঁচার জন্য সেশন ও ইউজার-এজেন্ট যুক্ত করা হলো
-    session = requests.Session()
-    session.headers.update({
-        "User-Agent": random.choice(USER_AGENTS),
-        "Connection": "keep-alive",
-    })
-
-    ticker = yf.Ticker(yahoo_symbol, session=session)
-    df = ticker.history(period="1d", interval="1m")
-    if df is not None and not df.empty:
-      return df
+    # ১০ মিনিটের ক্যান্ডেল বা আপনার বটের টাইমফ্রেম অনুযায়ী ফিউচার্স ডেটা ফেচ করা
+    ohlcv = exchange.fetch_ohlcv(symbol, timeframe='10m', limit=5)
+    if ohlcv and len(ohlcv) >= 2:
+      # শেষ ক্লোজ হওয়া ক্যান্ডেলটি নেওয়ার জন্য
+      last_candle = ohlcv[-2]
+      # format: [timestamp, open, high, low, close, volume]
+      return last_candle[1], last_candle[4]  # Open price, Close price
   except Exception as e:
-    pass
-  return None
+    print(f"Binance Result Fetch Error: {e}")
+  return None, None
 
 
-def track_signal_result(symbol, signal_type, sent_time_str):
-  # Quotex 1-Minute expiry এর জন্য ক্যান্ডেল ক্লোজ হওয়ার পর্যন্ত (৬০ সেকেন্ড) অপেক্ষা করা
+def track_signal_result(symbol, signal_type):
+  # ক্যান্ডেল ক্লোজ হওয়ার জন্য নির্ধারিত সময় অপেক্ষা করা (যেমন ৬০ সেকেন্ড বা টাইমফ্রেম অনুযায়ী)
   time.sleep(60)
 
   try:
-    # লেটেস্ট ক্যান্ডেল ডাটা ফেচ করা রেজাল্ট চেক করার জন্য
-    df = get_yahoo_candles_for_result(symbol=symbol)
-    if df is not None and len(df) >= 3:
-      # [গুরুত্বপূর্ণ পরিবর্তন] df.iloc[-1] হলো রানিং ক্যান্ডেল।
-      # তাই সিগন্যাল ক্যান্ডেলটির রেজাল্ট দেখতে হলে df.iloc[-2] (সবেমাত্র ক্লোজ হওয়া ক্যান্ডেল) নিতে হবে।
-      last_candle = df.iloc[-2]
-      open_price = last_candle["Open"]
-      close_price = last_candle["Close"]
+    open_price, close_price = get_binance_candles_for_result(symbol)
 
-      # উইন নাকি লস নির্ধারণ লজিক
+    if open_price is not None and close_price is not None:
+      # উইন নাকি লস নির্ধারণ লজিক (ফিউচার্স লং/শর্ট বা আপ/ডাউন অনুযায়ী)
       if close_price > open_price:
-        actual_result = "CALL"  # Green Candle
+        actual_result = 'CALL'  # সবুজ ক্যান্ডেল (UP)
       elif close_price < open_price:
-        actual_result = "PUT"  # Red Candle
+        actual_result = 'PUT'  # লাল ক্যান্ডেল (DOWN)
       else:
-        actual_result = "DOJI"
+        actual_result = 'DOJI'
 
       if actual_result == signal_type:
         result_msg = (
-            f"✅ **RESULT: WIN 🎉**\n📊 Asset: {symbol}\n⚡ Signal was:"
-            f" {signal_type}"
+            f'✅ **BINANCE RESULT: WIN 🎉**\n📊 Pair: `{symbol}`\n⚡ Signal was:'
+            f' `{signal_type}`'
         )
-      elif actual_result == "DOJI":
-        result_msg = f"⚪ **RESULT: DOJI (Tie) ⚠️**\n📊 Asset: {symbol}"
+      elif actual_result == 'DOJI':
+        result_msg = (
+            f'⚪ **BINANCE RESULT: DOJI (Tie) ⚠️**\n📊 Pair: `{symbol}`'
+        )
       else:
         result_msg = (
-            f"❌ **RESULT: LOSS 💔**\n📊 Asset: {symbol}\n⚡ Signal was:"
-            f" {signal_type}"
+            f'❌ **BINANCE RESULT: LOSS 💔**\n📊 Pair: `{symbol}`\n⚡ Signal was:'
+            f' `{signal_type}`'
         )
 
-      # টেলিগ্রামে রেজাল্ট মেসেজ পাঠানো
-      url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+      # টেলিগ্রামে রেজাল্ট পাঠানো
+      url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage'
       payload = {
-          "chat_id": TELEGRAM_CHAT_ID,
-          "text": result_msg,
-          "parse_mode": "Markdown",
+          'chat_id': TELEGRAM_CHAT_ID,
+          'text': result_msg,
+          'parse_mode': 'Markdown',
       }
       requests.post(url, json=payload)
 
@@ -105,34 +74,35 @@ def track_signal_result(symbol, signal_type, sent_time_str):
 
 
 def send_telegram_signal(symbol, setup_name, signal_type):
-  emoji = "🟢 CALL (UP)" if signal_type == "CALL" else "🔴 PUT (DOWN)"
+  """বট যখনই সিগন্যাল পাবে, তা টেলিগ্রামে পাঠাবে এবং রেজাল্ট ট্র্যাক করবে"""
+  emoji = '🟢 LONG (CALL)' if signal_type == 'CALL' else '🔴 SHORT (PUT)'
 
   message = (
-      f"🚨 **NEW TRADING SIGNAL (Non-OTC)** 🚨\n\n"
-      f"📊 **Asset:** {symbol}\n"
-      f"🎯 **Strategy:** {setup_name}\n"
-      f"⚡ **Direction:** {emoji}\n"
-      f"⏱ **Timeframe:** 1 Minute\n\n"
-      f"⚠️ *Quotex-এ ক্যান্ডেল শুরু হওয়ার ১-২ সেকেন্ড আগে ট্রেড প্লেস করুন!*"
+      f'🚨 **BINANCE FUTURES SIGNAL (10x)** 🚨\n\n'
+      f'📊 **Pair:** `{symbol}`\n'
+      f'🎯 **Strategy:** `{setup_name}`\n'
+      f'⚡ **Direction:** {emoji}\n'
+      f'⏱ **Leverage:** 10x\n\n'
+      f'⚠️ *Binance Futures এ অটোমেটিক এক্সিকিউট হচ্ছে!*'
   )
 
-  url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+  url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage'
   payload = {
-      "chat_id": TELEGRAM_CHAT_ID,
-      "text": message,
-      "parse_mode": "Markdown",
+      'chat_id': TELEGRAM_CHAT_ID,
+      'text': message,
+      'parse_mode': 'Markdown',
   }
 
   try:
     response = requests.post(url, json=payload)
     if response.status_code == 200:
-      # সিগন্যাল সফলভাবে যাওয়ার পর ব্যাকগ্রাউন্ডে রেজাল্ট ট্র্যাক করার জন্য থ্রেড রান করা
-      t = Thread(
-          target=track_signal_result, args=(symbol, signal_type, time.time())
+      # ব্যাকগ্রাউন্ডে রেজাল্ট ট্র্যাক করার জন্য থ্রেড চালু করা
+      t = threading.Thread(
+          target=track_signal_result, args=(symbol, signal_type)
       )
       t.daemon = True
       t.start()
 
   except Exception as e:
-    print(f"Telegram Alert Error: {e}")
-        
+    print(f'Telegram Alert Error: {e}')
+      
