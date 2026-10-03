@@ -3,7 +3,7 @@ import time
 import ccxt
 import requests
 
-# আপনার টেলিগ্রাম বট টোকেন এবং চ্যাট আইডি এখানে বসাবেন
+# আপনার টেলিগ্রাম বট টোকেন এবং চ্যাট আইডি
 TELEGRAM_BOT_TOKEN = "8828383409:AAGzaDGCz4lQnCEIAUhImFyCnMIVj-0ZNso"
 TELEGRAM_CHAT_ID = "6885238220"
 
@@ -15,10 +15,10 @@ exchange = ccxt.binance({
 
 
 def get_binance_candles_for_result(symbol):
-  """বাইন্যান্স ফিউচার্স থেকে সিগন্যালের রেজাল্ট চেক করার জন্য ক্যান্ডেল ডেটা আনা"""
+  """বাইন্যান্স ফিউচার্স থেকে সিগন্যালের রেজাল্ট চেক করার জন্য ১ মিনিটের ক্যান্ডেল ডেটা আনা"""
   try:
-    # ১০ মিনিটের ক্যান্ডেল বা আপনার বটের টাইমফ্রেম অনুযায়ী ফিউচার্স ডেটা ফেচ করা
-    ohlcv = exchange.fetch_ohlcv(symbol, timeframe='10m', limit=5)
+    # ১ মিনিটের ক্যান্ডেল অনুযায়ী ফিউচার্স ডেটা ফেচ করা
+    ohlcv = exchange.fetch_ohlcv(symbol, timeframe='1m', limit=5)
     if ohlcv and len(ohlcv) >= 2:
       # শেষ ক্লোজ হওয়া ক্যান্ডেলটি নেওয়ার জন্য
       last_candle = ohlcv[-2]
@@ -30,14 +30,14 @@ def get_binance_candles_for_result(symbol):
 
 
 def track_signal_result(symbol, signal_type):
-  # ক্যান্ডেল ক্লোজ হওয়ার জন্য নির্ধারিত সময় অপেক্ষা করা (যেমন ৬০ সেকেন্ড বা টাইমফ্রেম অনুযায়ী)
+  # ১ মিনিটের ক্যান্ডেলের জন্য ৬০ সেকেন্ড অপেক্ষা করা
   time.sleep(60)
 
   try:
     open_price, close_price = get_binance_candles_for_result(symbol)
 
     if open_price is not None and close_price is not None:
-      # উইন নাকি লস নির্ধারণ লজিক (ফিউচার্স লং/শর্ট বা আপ/ডাউন অনুযায়ী)
+      # উইন নাকি লস নির্ধারণ লজিক (আপ/ডাউন অনুযায়ী)
       if close_price > open_price:
         actual_result = 'CALL'  # সবুজ ক্যান্ডেল (UP)
       elif close_price < open_price:
@@ -78,11 +78,11 @@ def send_telegram_signal(symbol, setup_name, signal_type):
   emoji = '🟢 LONG (CALL)' if signal_type == 'CALL' else '🔴 SHORT (PUT)'
 
   message = (
-      f'🚨 **BINANCE FUTURES SIGNAL (10x)** 🚨\n\n'
+      f'🚨 **BINANCE FUTURES SIGNAL (1m)** 🚨\n\n'
       f'📊 **Pair:** `{symbol}`\n'
       f'🎯 **Strategy:** `{setup_name}`\n'
       f'⚡ **Direction:** {emoji}\n'
-      f'⏱ **Leverage:** 10x\n\n'
+      f'⏱ **Timeframe:** 1 Minute\n\n'
       f'⚠️ *Binance Futures এ অটোমেটিক এক্সিকিউট হচ্ছে!*'
   )
 
