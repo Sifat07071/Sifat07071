@@ -1,4 +1,3 @@
-yfinance
+ccxt
 pandas
-apscheduler
 requests
