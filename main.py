@@ -1,12 +1,10 @@
 from datetime import datetime
 import random
 import time
-import pandas as pd
-import requests
-import yfinance as yf
+from binance_api import get_binance_futures_candles, set_leverage
 from telegram_bot import send_telegram_signal
 
-# 1 theke 20 shob setup-er unified import
+# ১ থেকে ২০ পর্যন্ত সব স্ট্র্যাটেজির ইম্পোর্ট
 from strategies.strategies.strategy_1 import check_setup_1
 from strategies.strategies.strategy_2 import check_setup_2
 from strategies.strategies.strategy_3 import check_setup_3
@@ -51,65 +49,45 @@ STRATEGY_LIST = [
     ("Setup 20", check_setup_20),
 ]
 
-# Yahoo Finance compatible 12 Pairs
-YAHOO_PAIRS_MAP = {
-    "EURUSDT": "EURUSD=X",
-    "GBPUSDT": "GBPUSD=X",
-    "AUDUSDT": "AUDUSD=X",
-    "USDCAD": "USDCAD=X",
-    "USDJPY": "USDJPY=X",
-    "EURJPY": "EURJPY=X",
-    "GBPJPY": "GBPJPY=X",
-    "NZDUSDT": "NZDUSD=X",
-    "BTCUSDT": "BTC-USD",
-    "ETHUSDT": "ETH-USD",
-    "SOLUSDT": "SOL-USD",
-    "XRPUSDT": "XRP-USD",
-}
-
-# আইপি ব্লক এবং রেট লিমিট এড়ানোর জন্য র্যান্ডম ব্রাউজার ইউজার-এজেন্ট লিস্ট
-USER_AGENTS = [
-    (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,"
-        " like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    ),
-    (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15"
-        " (KHTML, like Gecko) Version/17.2.1 Safari/605.1.15"
-    ),
-    (
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like"
-        " Gecko) Chrome/119.0.0.0 Safari/537.36"
-    ),
-    (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101"
-        " Firefox/121.0"
-    ),
+# নিরাপদ এবং ফাস্ট স্ক্যান করার জন্য বাছাইকৃত ৩০টি ফিউচার্স পেয়ার
+BINANCE_FUTURES_PAIRS = [
+    "BTC/USDT",
+    "ETH/USDT",
+    "BNB/USDT",
+    "SOL/USDT",
+    "XRP/USDT",
+    "ADA/USDT",
+    "DOGE/USDT",
+    "AVAX/USDT",
+    "LINK/USDT",
+    "DOT/USDT",
+    "MATIC/USDT",
+    "LTC/USDT",
+    "BCH/USDT",
+    "NEAR/USDT",
+    "ATOM/USDT",
+    "UNI/USDT",
+    "XLM/USDT",
+    "ETC/USDT",
+    "RENDER/USDT",
+    "INJ/USDT",
+    "FET/USDT",
+    "AR/USDT",
+    "ICP/USDT",
+    "APT/USDT",
+    "OP/USDT",
+    "ARB/USDT",
+    "SUI/USDT",
+    "TIA/USDT",
+    "SEI/USDT",
+    "PEPE/USDT",
 ]
 
 
-def get_yahoo_candles(symbol):
-  try:
-    yahoo_symbol = YAHOO_PAIRS_MAP.get(symbol, symbol)
-
-    # কাস্টম সেশন এবং র্যান্ডম ইউজার-এজেন্ট তৈরি (আইপি ব্লক বাঁচার জন্য)
-    session = requests.Session()
-    session.headers.update({
-        "User-Agent": random.choice(USER_AGENTS),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-        "Connection": "keep-alive",
-    })
-
-    ticker = yf.Ticker(yahoo_symbol, session=session)
-    df = ticker.history(period="1d", interval="1m")
-
-    if df is not None and not df.empty:
-      return df
-  except Exception as e:
-    # এরর সাইলেন্ট রাখতে চাইলে বা প্রিন্ট করতে চাইলে
-    pass
-  return None
+def initialize_market_leverage():
+  print("⚙️ Setting 10x Leverage for all target pairs...")
+  for symbol in BINANCE_FUTURES_PAIRS:
+    set_leverage(symbol, leverage=10)
 
 
 def scan_all_strategies(df):
@@ -124,8 +102,15 @@ def scan_all_strategies(df):
 
 
 def start_bot():
-  print("🤖 24/7 Safe Yahoo Finance Live Scanning Bot Started...")
-  print(f"📊 Monitoring {len(YAHOO_PAIRS_MAP)} pairs with 20 setups.")
+  print("🤖 Binance Futures 10x Automated Trading Bot Started...")
+  print(
+      f"📊 Monitoring {len(BINANCE_FUTURES_PAIRS)} pairs with 20 loaded"
+      " strategies."
+  )
+
+  # বট স্টার্ট হওয়ার সাথে সাথে সব পেয়ারে ১০x লেভারেজ সেট করে নেবে
+  initialize_market_leverage()
+
   last_scanned_minute = -1
 
   while True:
@@ -134,24 +119,30 @@ def start_bot():
       second = now.second
       minute = now.minute
 
-      # প্রতি মিনিট-এর ঠিক 58-th second-e scan korbe
+      # প্রতি মিনিটের ঠিক ৫৮ সেকেন্ডে স্ক্যান করবে
       if second == 58 and minute != last_scanned_minute:
         last_scanned_minute = minute
-        print(f"\n🔍 Scanning Market at {now.strftime('%H:%M:%S')}...")
+        print(
+            "\n🔍 Scanning Binance Futures Market at"
+            f" {now.strftime('%H:%M:%S')}..."
+        )
 
-        for symbol in YAHOO_PAIRS_MAP.keys():
+        for symbol in BINANCE_FUTURES_PAIRS:
           try:
-            df = get_yahoo_candles(symbol=symbol)
+            # binance_api.py থেকে ক্যান্ডেল ডেটা ফেচ করা
+            df = get_binance_futures_candles(symbol, timeframe="10m", limit=100)
 
             if df is not None and not df.empty:
               setup_name, signal = scan_all_strategies(df)
-
               if signal:
-                print(f"✅ MATCH FOUND! [{symbol}] - {setup_name} -> {signal}")
+                print(
+                    f"✅ FUTURES MATCH FOUND! [{symbol}] - {setup_name} ->"
+                    f" {signal}"
+                )
+                # telegram_bot.py এর মাধ্যমে সিগন্যাল পাঠানো
                 send_telegram_signal(symbol, setup_name, signal)
 
-            # প্রতিটি পেয়ার রিকোয়েস্টের মাঝে হালকা বিরতি (সার্ভার প্রটেকশনের জন্য)
-            time.sleep(random.uniform(0.5, 1.5))
+            time.sleep(random.uniform(0.2, 0.4))
 
           except Exception as pair_err:
             print(f"⚠️ Error scanning {symbol}: {pair_err}")
@@ -170,4 +161,4 @@ def start_bot():
 
 if __name__ == "__main__":
   start_bot()
-                      
+      
